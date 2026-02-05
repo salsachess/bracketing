@@ -33,20 +33,47 @@ from formats import (
 )
 
 
+def league_phase_valid_participant_counts(rounds: int) -> tuple[int, list[int]]:
+    """
+    Для League Phase при заданій кількості турів: дійсні кількості учасників.
+    Умови: n = (rounds+1)*k (k — дільник rounds); n парне (кожен тур по n/2 матчів, без баїв);
+    при одному матчі з кошика розмір кошика парний; (команд у кошику)×(матчів з кошика) парне.
+    Повертає (мінімум_учасників, відсортований список допустимих n).
+    """
+    pot_size = rounds + 1
+    divisors = [d for d in range(1, rounds + 1) if rounds % d == 0]
+    valid = []
+    for k in divisors:
+        n = pot_size * k
+        if n % 2 == 1:
+            continue  # тільки парна кількість: кожен тур по n/2 матчів, інакше не вмістити в rounds турів
+        n_pots = n // pot_size
+        k_per_pot = rounds // n_pots
+        if k_per_pot == 1 and pot_size % 2 == 1:
+            continue  # заборонено: один матч з кошика при непарному розмірі кошика
+        if n_pots == 1 and pot_size % 2 == 1:
+            continue  # один кошик з непарним числом: не вмістити всі матчі в rounds турів без баїв
+        if (pot_size * k_per_pot) % 2 == 1:
+            continue  # неціла кількість матчів у кошику (27.5 тощо)
+        valid.append(n)
+    return (min(valid) if valid else 0, sorted(valid))
+
+
 def make_sample_participants(
     n: int,
     num_seeded: int | None = None,
     format_kind: str = "default",
+    rounds: int | None = None,
 ) -> list[Participant]:
     """
     Згенерувати n учасників для прикладу.
     format_kind: "default" — номери та сіяний/жереб; "league_phase" — номери та кошики.
-    num_seeded: кількість сіяних (для default; якщо None — n//2 для нокауту/колової).
+    num_seeded: кількість сіяних (для default; 0 = жереб, n = усі сіяні).
+    rounds: для league_phase — кількість турів (розмір кошика = rounds+1).
     """
     if format_kind == "league_phase":
-        # 1-кошик1, 2-кошик1, ..., 9-кошик1, 10-кошик2, ..., 36-кошик4
+        teams_per_pot = (rounds + 1) if rounds is not None else 9
         participants = []
-        teams_per_pot = 9
         for i in range(1, n + 1):
             pot = (i - 1) // teams_per_pot + 1
             participants.append(
@@ -70,11 +97,12 @@ def run_draw(
     participants: list[Participant],
     seed: int | None = 42,
     num_seeded: int | None = None,
+    league_rounds: int | None = None,
 ) -> DrawResult:
-    """Запустити жеребкування за вибором. num_seeded передається у формати, де є сіяння."""
+    """Запустити жеребкування за вибором. num_seeded: 0=повний жереб, n=усі сіяні. league_rounds: кількість турів для формату 8."""
     seed = seed if seed is not None else None
     n = len(participants)
-    if num_seeded is None:
+    if num_seeded is None and choice not in ("8", "league_phase", "етап ліги", "league phase"):
         num_seeded = n // 2
     if choice in ("1", "нокаут", "knockout"):
         return draw_knockout(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
@@ -89,9 +117,10 @@ def run_draw(
     if choice in ("6", "uefa", "ліга чемпіонів"):
         return draw_uefa_style(participants, num_groups=8, advance_per_group=2, shuffle_seed=seed, seeded=True)
     if choice in ("8", "league_phase", "етап ліги", "league phase"):
-        return draw_uefa_league_phase(participants, shuffle_seed=seed, country_lock=False, max_per_country=2)
+        rounds = league_rounds if league_rounds is not None else 8
+        return draw_uefa_league_phase(participants, rounds=rounds, shuffle_seed=seed, country_lock=False, max_per_country=2)
     # Інакше — кастомна формула
-    return draw_custom(participants, formula=choice, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
+    return draw_custom(participants, formula=choice, shuffle_seed=seed, seeded=True, num_seeded=num_seeded, rounds=league_rounds)
 
 
 def main() -> None:
@@ -117,33 +146,72 @@ def main() -> None:
         print("Нічого не обрано.")
         return
 
-    # Кількість учасників
-    if argv and len(argv) >= 2 and argv[-1].isdigit():
-        n = int(argv[-1])
-        choice = " ".join(argv[:-1]).strip() or "1"
-    else:
-        try:
-            n_input = input("Кількість учасників (за замовч. 8): ").strip() or "8"
-            n = int(n_input)
-        except (EOFError, ValueError):
-            if choice.strip() in ("8", "league_phase", "етап ліги", "league phase"):
-                n = 36
-            elif choice.strip() in ("6", "uefa", "ліга чемпіонів"):
-                n = 32
-            else:
-                n = 8
+    num_seeded_arg: int | None = None
+    league_rounds_arg: int | None = None
+    is_league_phase = choice.strip() in ("8", "league_phase", "етап ліги", "league phase")
 
-    if choice in ("8", "league_phase", "етап ліги", "league phase"):
-        participants = make_sample_participants(36, format_kind="league_phase")
-        print("Для етапу ліги ЛЧ використано 36 учасників (4 кошики по 9).\n")
-    elif choice in ("6", "uefa", "ліга чемпіонів") and n < 16:
-        participants = make_sample_participants(32, num_seeded=16, format_kind="default")
-        print("Для формату УЄФА використано 32 учасники.\n")
+    if is_league_phase:
+        while True:
+            try:
+                r_input = input("Кількість турів (за замовч. 8): ").strip() or "8"
+                league_rounds_arg = int(r_input)
+            except (EOFError, ValueError):
+                league_rounds_arg = 8
+            pot_size = league_rounds_arg + 1
+            min_n, valid_n_list = league_phase_valid_participant_counts(league_rounds_arg)
+            if valid_n_list:
+                break
+            print(
+                f"При {league_rounds_arg} турах немає допустимої (парної) кількості учасників. "
+                "Оберіть іншу кількість турів (наприклад 8 або 12)."
+            )
+        while True:
+            try:
+                n_input = input(
+                    f"Кількість учасників (мін. {min_n}, допустимі: {valid_n_list}, за замовч. 36): "
+                ).strip() or "36"
+                n = int(n_input)
+            except (EOFError, ValueError):
+                n = 36
+            if n in valid_n_list:
+                break
+            print(
+                f"При {league_rounds_arg} турах кількість учасників має бути така, щоб кількість турів "
+                f"ділилася на кількість кошиків (кошик = {pot_size})."
+            )
+            print(f"Мінімум учасників: {min_n}. Допустимі значення: {valid_n_list}. Спробуйте ще раз.")
+        participants = make_sample_participants(n, format_kind="league_phase", rounds=league_rounds_arg)
+        print(f"Етап ліги ЛЧ: {n} учасників, {league_rounds_arg} турів, кошики по {pot_size}.\n")
     else:
-        participants = make_sample_participants(n, num_seeded=n // 2, format_kind="default")
+        if argv and len(argv) >= 2 and argv[-1].isdigit():
+            n = int(argv[-1])
+            choice = " ".join(argv[:-1]).strip() or "1"
+        else:
+            try:
+                n_input = input("Кількість учасників (за замовч. 8): ").strip() or "8"
+                n = int(n_input)
+            except (EOFError, ValueError):
+                n = 32 if choice.strip() in ("6", "uefa", "ліга чемпіонів") else 8
+
+        needs_seeded = choice.strip() in ("1", "2", "3", "4", "5", "нокаут", "колова", "round_robin", "knockout")
+        if needs_seeded:
+            try:
+                s_input = input("Кількість сіяних (0 = повний жереб, n = усі сіяні, за замовч. n/2): ").strip()
+                if s_input != "":
+                    num_seeded_arg = int(s_input)
+            except (EOFError, ValueError):
+                pass
+
+        if choice in ("6", "uefa", "ліга чемпіонів") and n < 16:
+            participants = make_sample_participants(32, num_seeded=16, format_kind="default")
+            print("Для формату УЄФА використано 32 учасники.\n")
+        else:
+            participants = make_sample_participants(
+                n, num_seeded=num_seeded_arg if num_seeded_arg is not None else n // 2, format_kind="default"
+            )
 
     try:
-        result = run_draw(choice, participants)
+        result = run_draw(choice, participants, num_seeded=num_seeded_arg, league_rounds=league_rounds_arg)
         print(result.summary())
     except Exception as e:
         print(f"Помилка: {e}")
