@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Генератор жеребкувань — bracketing</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --surface: #1a1a1f;
+      --border: #2d2d35;
+      --text: #e8e6e3;
+      --muted: #9b9892;
+      --accent: #7c9cbf;
+      --accent-hover: #95b3d4;
+      --error: #c75c5c;
+      --round-bg: #222228;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 1.5rem;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 56rem; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.5rem; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .form-row { margin-bottom: 1rem; }
+    .form-row:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input, select {
+      width: 100%;
+      max-width: 16rem;
+      padding: 0.5rem 0.65rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #status { color: var(--muted); font-size: 0.9rem; margin-top: 0.5rem; }
+    #status.loading { color: var(--accent); }
+    #status.error { color: var(--error); }
+    #out { margin-top: 1rem; }
+    #out .error { color: var(--error); padding: 0.75rem; background: rgba(199,92,92,0.1); border-radius: 6px; }
+    #out .description { color: var(--muted); margin-bottom: 1rem; white-space: pre-wrap; }
+    #out .round { margin-bottom: 1rem; }
+    #out .round-title { font-weight: 600; margin-bottom: 0.5rem; color: var(--accent); }
+    #out .match { padding: 0.35rem 0; font-family: ui-monospace, monospace; font-size: 0.9rem; }
+    #out .match .id { color: var(--muted); margin-right: 0.5rem; }
+    #out .groups { margin-bottom: 1rem; }
+    #out .group-name { font-weight: 600; margin-bottom: 0.25rem; }
+    #out .group-participants { color: var(--muted); font-size: 0.9rem; }
+    .hidden { display: none; }
+    .two { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Універсальний генератор жеребкувань</h1>
+    <p class="sub">Обирайте формат і параметри — жеребкування виконується у браузері (Python + Pyodide). Без авторизації.</p>
+
+    <div class="card">
+      <form id="form">
+        <div class="form-row">
+          <label for="format">Формат</label>
+          <select id="format" name="format">
+            <option value="1">1 — Нокаут (одиночний)</option>
+            <option value="2">2 — Нокаут подвійний</option>
+            <option value="3">3 — Нокаут потрійний</option>
+            <option value="4">4 — Колова система</option>
+            <option value="5">5 — Подвійна колова система</option>
+            <option value="6">6 — Стиль Ліги чемпіонів УЄФА (групи + плей-оф)</option>
+            <option value="8">8 — Етап ліги ЛЧ (League Phase)</option>
+            <option value="7">7 — Кастомна формула</option>
+          </select>
+        </div>
+        <div class="form-row two">
+          <div>
+            <label for="n">Кількість учасників</label>
+            <input type="number" id="n" name="n" min="2" value="8">
+          </div>
+          <div id="leagueRoundsWrap" class="hidden">
+            <label for="leagueRounds">Кількість турів (League Phase)</label>
+            <input type="number" id="leagueRounds" name="leagueRounds" min="4" value="8">
+          </div>
+          <div>
+            <label for="seed">Seed (опційно)</label>
+            <input type="number" id="seed" name="seed" placeholder="порожньо">
+          </div>
+          <div id="numSeededWrap">
+            <label for="numSeeded">Сіяних (0=жереб, порожньо=n/2)</label>
+            <input type="number" id="numSeeded" name="numSeeded" placeholder="n/2">
+          </div>
+          <div id="formulaWrap" class="hidden">
+            <label for="formula">Формула (напр. groups(4).round_robin().top(2).knockout())</label>
+            <input type="text" id="formula" name="formula" placeholder="groups(4).round_robin().top(2).knockout()">
+          </div>
+        </div>
+        <div class="form-row">
+          <button type="submit" id="btn">Згенерувати</button>
+          <p id="status"></p>
+        </div>
+      </form>
+    </div>
+
+    <div id="out"></div>
+  </div>
+
+  <script>
+    const formatSelect = document.getElementById('format');
+    const nInput = document.getElementById('n');
+    const leagueRoundsWrap = document.getElementById('leagueRoundsWrap');
+    const leagueRoundsInput = document.getElementById('leagueRounds');
+    const numSeededWrap = document.getElementById('numSeededWrap');
+    const formulaWrap = document.getElementById('formulaWrap');
+    const formulaInput = document.getElementById('formula');
+    const seedInput = document.getElementById('seed');
+    const numSeededInput = document.getElementById('numSeeded');
+    const form = document.getElementById('form');
+    const btn = document.getElementById('btn');
+    const statusEl = document.getElementById('status');
+    const outEl = document.getElementById('out');
+
+    formatSelect.addEventListener('change', () => {
+      const v = formatSelect.value;
+      const is8 = v === '8';
+      const is7 = v === '7';
+      leagueRoundsWrap.classList.toggle('hidden', !is8);
+      numSeededWrap.classList.toggle('hidden', is8 || is7);
+      formulaWrap.classList.toggle('hidden', !is7);
+      if (is8) {
+        nInput.min = 18;
+        nInput.placeholder = 'напр. 36';
+      } else {
+        nInput.min = 2;
+        nInput.placeholder = '';
+      }
+    });
+    formatSelect.dispatchEvent(new Event('change'));
+
+    let pyodide = null;
+
+    async function loadPyodide() {
+      if (pyodide) return pyodide;
+      statusEl.textContent = 'Завантаження Python (Pyodide)...';
+      statusEl.classList.add('loading');
+      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+      await pyodide.loadPackage('micropip');
+      await pyodide.runPythonAsync('import micropip; await micropip.install("networkx")');
+      statusEl.textContent = 'Завантаження модулів жеребкування...';
+      const pathname = window.location.pathname || '';
+      const base = pathname.endsWith('/') ? pathname : pathname.replace(/[^/]+$/, '') || '/';
+      const files = [
+        'models.py',
+        'draw_utils.py',
+        'formats/__init__.py',
+        'formats/knockout.py',
+        'formats/round_robin.py',
+        'formats/uefa_style.py',
+        'formats/uefa_league_phase.py',
+        'formats/custom.py',
+        'main.py'
+      ];
+      pyodide.FS.mkdirTree('/bracketing/formats');
+      for (const f of files) {
+        const url = base + f;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Не вдалося завантажити ' + f);
+        const text = await resp.text();
+        const path = '/bracketing/' + f;
+        pyodide.FS.writeFile(path, text);
+      }
+      await pyodide.runPythonAsync(`
+import sys
+sys.path.insert(0, '/bracketing')
+import main
+# re-expose for JS
+run_draw_web = main.run_draw_web
+league_phase_valid_participant_counts = main.league_phase_valid_participant_counts
+`);
+      statusEl.textContent = 'Готово. Оберіть параметри і натисніть «Згенерувати».';
+      statusEl.classList.remove('loading');
+      return pyodide;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await loadPyodide();
+      } catch (err) {
+        statusEl.textContent = 'Помилка завантаження: ' + err.message;
+        statusEl.classList.add('error');
+        return;
+      }
+      const choice = formatSelect.value;
+      const n = parseInt(nInput.value, 10) || 8;
+      const leagueRounds = choice === '8' ? (parseInt(leagueRoundsInput.value, 10) || 8) : null;
+      let numSeeded = numSeededInput.value.trim();
+      numSeeded = numSeeded === '' ? null : parseInt(numSeeded, 10);
+      let seed = seedInput.value.trim();
+      seed = seed === '' ? null : (parseInt(seed, 10) || null);
+      const formula = formulaInput.value.trim() || null;
+      if (choice === '7' && !formula) {
+        statusEl.textContent = 'Для формату 7 введіть формулу (напр. groups(4).round_robin().top(2).knockout()).';
+        statusEl.classList.add('error');
+        return;
+      }
+
+      btn.disabled = true;
+      statusEl.textContent = 'Розрахунок...';
+      statusEl.classList.add('loading');
+      outEl.innerHTML = '';
+
+      try {
+        pyodide.globals.set('web_choice', choice);
+        pyodide.globals.set('web_n', n);
+        pyodide.globals.set('web_league_rounds', leagueRounds);
+        pyodide.globals.set('web_num_seeded', numSeeded);
+        pyodide.globals.set('web_seed', seed);
+        pyodide.globals.set('web_formula', formula);
+        await pyodide.runPythonAsync(`
+from main import run_draw_web
+web_result = run_draw_web(web_choice, web_n, web_league_rounds, web_num_seeded, web_seed, web_formula)
+`);
+        const result = pyodide.globals.get('web_result').toJs();
+        statusEl.textContent = '';
+        statusEl.classList.remove('loading');
+
+        if (result.error) {
+          outEl.innerHTML = '<div class="error">' + escapeHtml(result.error) + '</div>';
+        } else {
+          let html = '';
+          if (result.description)
+            html += '<div class="description">' + escapeHtml(result.description) + '</div>';
+          if (result.groups && result.groups.length) {
+            html += '<div class="groups">';
+            for (const g of result.groups) {
+              html += '<div class="group-name">' + escapeHtml(g.name) + '</div>';
+              html += '<div class="group-participants">' + escapeHtml(g.participants.join(', ')) + '</div>';
+            }
+            html += '</div>';
+          }
+          if (result.rounds && result.rounds.length) {
+            for (let r = 0; r < result.rounds.length; r++) {
+              html += '<div class="round">';
+              html += '<div class="round-title">— Раунд ' + (r + 1) + ' —</div>';
+              for (const m of result.rounds[r])
+                html += '<div class="match"><span class="id">[' + escapeHtml(m.id) + ']</span> ' + escapeHtml(m.a) + ' — ' + escapeHtml(m.b) + '</div>';
+              html += '</div>';
+            }
+          }
+          outEl.innerHTML = html || '<div class="description">(немає матчів для виводу)</div>';
+        }
+      } catch (err) {
+        statusEl.textContent = 'Помилка: ' + err.message;
+        statusEl.classList.add('error');
+        outEl.innerHTML = '<div class="error">' + escapeHtml(String(err)) + '</div>';
+      }
+      btn.disabled = false;
+    });
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

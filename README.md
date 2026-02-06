@@ -15,7 +15,14 @@
 | **Етап ліги ЛЧ (League Phase)** | Сучасна формула: 36 команд, 4 кошики по 9, по 8 матчів (2 з кожного кошика, 4 вдома / 4 на виїзді). Опційно Country Lock та Max 2 per country. |
 | **Кастомна формула** | Власна послідовність етапів. |
 
-## Запуск
+## Онлайн (GitHub Pages)
+
+Веб-версія без авторизації: [https://salsachess.github.io/bracketing/](https://salsachess.github.io/bracketing/)  
+Обирайте формат і параметри — жеребкування виконується у браузері (Python через Pyodide). Перше завантаження може зайняти кілька десятків секунд.
+
+Щоб увімкнути GitHub Pages: **Settings → Pages → Source:** Deploy from a branch → гілка `main`, папка `/ (root)`.
+
+## Запуск (CLI)
 
 ```bash
 python main.py

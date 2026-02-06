@@ -123,6 +123,68 @@ def run_draw(
     return draw_custom(participants, formula=choice, shuffle_seed=seed, seeded=True, num_seeded=num_seeded, rounds=league_rounds)
 
 
+def run_draw_web(
+    choice: str,
+    n: int,
+    league_rounds: int | None = None,
+    num_seeded: int | None = None,
+    seed: int | None = None,
+    formula: str | None = None,
+) -> dict:
+    """
+    API для веб-сторінки: приймає параметри, повертає серіалізований результат
+    (опис, раунди, групи) або {"error": "..."}.
+    """
+    try:
+        if choice == "7" and formula:
+            choice = formula.strip()
+        if choice == "8":
+            league_rounds = league_rounds if league_rounds is not None else 8
+            min_n, valid = league_phase_valid_participant_counts(league_rounds)
+            if not valid:
+                return {"error": f"При {league_rounds} турах немає допустимої кількості учасників. Оберіть 8 або 12 турів."}
+            if n not in valid:
+                return {"error": f"При {league_rounds} турах допустимі кількості: {valid}. Обрано {n}."}
+            participants = make_sample_participants(n, format_kind="league_phase", rounds=league_rounds)
+        else:
+            league_rounds = None
+            if choice in ("6", "uefa", "ліга чемпіонів") and n < 16:
+                n = 32
+            participants = make_sample_participants(
+                n,
+                num_seeded=n // 2 if num_seeded is None else num_seeded,
+                format_kind="default",
+            )
+        result = run_draw(
+            choice,
+            participants,
+            seed=seed,
+            num_seeded=num_seeded if choice != "8" else None,
+            league_rounds=league_rounds,
+        )
+        rounds_out = []
+        for r in result.rounds:
+            rounds_out.append([
+                {
+                    "id": m.match_id,
+                    "a": m.participant_a.name if m.participant_a else "?",
+                    "b": m.participant_b.name if m.participant_b else "?",
+                }
+                for m in r
+            ])
+        groups_out = [
+            {"name": g.name, "participants": [p.name for p in g.participants]}
+            for g in result.groups
+        ]
+        return {
+            "description": result.description,
+            "rounds": rounds_out,
+            "groups": groups_out,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def main() -> None:
     print("Універсальний генератор жеребкувань\n")
     print("Формати:")
