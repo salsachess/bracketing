@@ -168,11 +168,11 @@
 
     let pyodide = null;
 
-    async function loadPyodide() {
+    async function initPyodide() {
       if (pyodide) return pyodide;
       statusEl.textContent = 'Завантаження Python (Pyodide)...';
       statusEl.classList.add('loading');
-      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+      pyodide = await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
       await pyodide.loadPackage('micropip');
       await pyodide.runPythonAsync('import micropip; await micropip.install("networkx")');
       statusEl.textContent = 'Завантаження модулів жеребкування...';
@@ -214,7 +214,7 @@ league_phase_valid_participant_counts = main.league_phase_valid_participant_coun
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
-        await loadPyodide();
+        await initPyodide();
       } catch (err) {
         statusEl.textContent = 'Помилка завантаження: ' + err.message;
         statusEl.classList.add('error');
