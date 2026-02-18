@@ -92,12 +92,9 @@
         <div class="form-row">
           <label for="format">Формат</label>
           <select id="format" name="format">
-            <option value="1">1 — Нокаут (одиночний)</option>
-            <option value="2">2 — Нокаут подвійний</option>
-            <option value="3">3 — Нокаут потрійний</option>
-            <option value="4">4 — Колова система</option>
-            <option value="5">5 — Подвійна колова система</option>
-            <option value="6">6 — Стиль Ліги чемпіонів УЄФА (групи + плей-оф)</option>
+            <option value="1">1 — Нокаут (одиночний, подвійний, потрійний)</option>
+            <option value="2">2 — Колова система</option>
+            <option value="3">3 — Стиль Ліги чемпіонів УЄФА (групи + плей-оф)</option>
             <option value="8">8 — Етап ліги ЛЧ (League Phase)</option>
             <option value="7">7 — Кастомна формула</option>
           </select>
@@ -106,6 +103,18 @@
           <div>
             <label for="n">Кількість учасників</label>
             <input type="number" id="n" name="n" min="2" value="8">
+          </div>
+          <div id="knockoutTypeWrap">
+            <label for="knockoutType">Тип нокауту</label>
+            <select id="knockoutType" name="knockoutType">
+              <option value="single">Одиночний</option>
+              <option value="double">Подвійний</option>
+              <option value="triple">Потрійний</option>
+            </select>
+          </div>
+          <div id="roundRobinRoundsWrap" class="hidden">
+            <label for="roundRobinRounds">Кількість кіл</label>
+            <input type="number" id="roundRobinRounds" name="roundRobinRounds" min="1" value="1">
           </div>
           <div id="leagueRoundsWrap" class="hidden">
             <label for="leagueRounds">Кількість турів (League Phase)</label>
@@ -137,6 +146,10 @@
   <script>
     const formatSelect = document.getElementById('format');
     const nInput = document.getElementById('n');
+    const knockoutTypeWrap = document.getElementById('knockoutTypeWrap');
+    const knockoutTypeSelect = document.getElementById('knockoutType');
+    const roundRobinRoundsWrap = document.getElementById('roundRobinRoundsWrap');
+    const roundRobinRoundsInput = document.getElementById('roundRobinRounds');
     const leagueRoundsWrap = document.getElementById('leagueRoundsWrap');
     const leagueRoundsInput = document.getElementById('leagueRounds');
     const numSeededWrap = document.getElementById('numSeededWrap');
@@ -151,8 +164,12 @@
 
     formatSelect.addEventListener('change', () => {
       const v = formatSelect.value;
+      const is1 = v === '1';
+      const is2 = v === '2';
       const is8 = v === '8';
       const is7 = v === '7';
+      knockoutTypeWrap.classList.toggle('hidden', !is1);
+      roundRobinRoundsWrap.classList.toggle('hidden', !is2);
       leagueRoundsWrap.classList.toggle('hidden', !is8);
       numSeededWrap.classList.toggle('hidden', is8 || is7);
       formulaWrap.classList.toggle('hidden', !is7);
@@ -222,6 +239,8 @@ league_phase_valid_participant_counts = main.league_phase_valid_participant_coun
       }
       const choice = formatSelect.value;
       const n = parseInt(nInput.value, 10) || 8;
+      const knockoutType = knockoutTypeSelect.value || 'single';
+      const roundRobinRounds = parseInt(roundRobinRoundsInput.value, 10) || 1;
       const leagueRounds = choice === '8' ? (parseInt(leagueRoundsInput.value, 10) || 8) : null;
       let numSeeded = numSeededInput.value.trim();
       numSeeded = numSeeded === '' ? null : parseInt(numSeeded, 10);
@@ -242,13 +261,15 @@ league_phase_valid_participant_counts = main.league_phase_valid_participant_coun
       try {
         pyodide.globals.set('web_choice', choice);
         pyodide.globals.set('web_n', n);
+        pyodide.globals.set('web_knockout_type', knockoutType);
+        pyodide.globals.set('web_round_robin_rounds', roundRobinRounds);
         pyodide.globals.set('web_league_rounds', leagueRounds);
         pyodide.globals.set('web_num_seeded', numSeeded);
         pyodide.globals.set('web_seed', seed);
         pyodide.globals.set('web_formula', formula);
         await pyodide.runPythonAsync(`
 from main import run_draw_web
-web_result = run_draw_web(web_choice, web_n, web_league_rounds, web_num_seeded, web_seed, web_formula)
+web_result = run_draw_web(web_choice, web_n, web_league_rounds, web_num_seeded, web_seed, web_formula, web_knockout_type, web_round_robin_rounds)
 `);
         const result = pyodide.globals.get('web_result').toJs();
         statusEl.textContent = '';

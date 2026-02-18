@@ -127,33 +127,39 @@ def draw_knockout(
     shuffle_seed: int | None = None,
     seeded: bool = True,
     num_seeded: Optional[int] = None,
+    bracket_type: str = "single",
 ) -> DrawResult:
     """
-    Одиночний нокаут: 1 vs останній, 2 vs передостанній, …; сітка жорстка.
+    Нокаут із вибором типу сітки: одиночний, подвійний або потрійний.
+    Одиночний: 1 vs останній, 2 vs передостанній, …; сітка жорстка.
     Якщо кількість не 2^k — перші отримують bye. num_seeded: кількість сіяних (решта — жереб).
+    bracket_type: "single", "double" або "triple".
     """
     if num_seeded is None and seeded:
         num_seeded = len(participants) // 2
     elif not seeded:
         num_seeded = None
-    matches, rounds = _build_single_knockout_bracket(participants, shuffle_seed, num_seeded)
-    desc = f"Одиночний нокаут ({len(participants)} учасників)"
-    if num_seeded is not None:
-        desc += f", {num_seeded} сіяних"
-    return DrawResult(matches=matches, rounds=rounds, description=desc)
+
+    bracket_type = bracket_type.lower().strip()
+    if bracket_type in ("double", "подвійний"):
+        return _draw_double_knockout(participants, shuffle_seed, num_seeded)
+    elif bracket_type in ("triple", "потрійний"):
+        return _draw_triple_knockout(participants, shuffle_seed, num_seeded)
+    else:
+        # За замовчуванням одиночний
+        matches, rounds = _build_single_knockout_bracket(participants, shuffle_seed, num_seeded)
+        desc = f"Одиночний нокаут ({len(participants)} учасників)"
+        if num_seeded is not None:
+            desc += f", {num_seeded} сіяних"
+        return DrawResult(matches=matches, rounds=rounds, description=desc)
 
 
-def draw_double_knockout(
+def _draw_double_knockout(
     participants: list[Participant],
     shuffle_seed: int | None = None,
-    seeded: bool = True,
     num_seeded: Optional[int] = None,
 ) -> DrawResult:
     """Подвійний нокаут: верхня сітка (як одиночний) + нижня сітка + фінал."""
-    if num_seeded is None and seeded:
-        num_seeded = len(participants) // 2
-    elif not seeded:
-        num_seeded = None
     upper_matches, upper_rounds = _build_single_knockout_bracket(participants, shuffle_seed, num_seeded)
     for m in upper_matches:
         m.match_id = "U-" + m.match_id
@@ -185,14 +191,13 @@ def draw_double_knockout(
     return DrawResult(matches=matches, rounds=rounds, description=desc)
 
 
-def draw_triple_knockout(
+def _draw_triple_knockout(
     participants: list[Participant],
     shuffle_seed: int | None = None,
-    seeded: bool = True,
     num_seeded: Optional[int] = None,
 ) -> DrawResult:
     """Потрійний нокаут (структура як подвійний)."""
-    result = draw_double_knockout(participants, shuffle_seed, seeded, num_seeded)
+    result = _draw_double_knockout(participants, shuffle_seed, num_seeded)
     result.description = (
         f"Потрійний нокаут ({len(participants)} учасників). Виліт після третьої поразки."
     )

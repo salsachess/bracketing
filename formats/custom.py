@@ -3,10 +3,10 @@
 
 Приклади формул:
   knockout
-  double_knockout
-  triple_knockout
+  knockout(bracket_type=double)
+  knockout(bracket_type=triple)
   round_robin
-  double_round_robin
+  round_robin(num_rounds=2)
   uefa(8, 2)          — 8 груп, по 2 виходять
   groups(4).round_robin().top(2).knockout()   — групи по 4, колова в групі, топ-2 далі, потім нокаут
   groups(3).round_robin().top(1).knockout()
@@ -16,21 +16,22 @@ from typing import Any
 
 from models import Participant, DrawResult
 from draw_utils import distribute_into_groups, next_power_of_two
-from .knockout import draw_knockout, draw_double_knockout, draw_triple_knockout, _build_single_knockout_bracket
-from .round_robin import draw_round_robin, draw_double_round_robin, _round_robin_pairs
+from .knockout import draw_knockout, _build_single_knockout_bracket
+from .round_robin import draw_round_robin, _round_robin_pairs
 from .uefa_league_phase import draw_uefa_league_phase
 
 
 # Іменовані формати без параметрів
 NAMED = {
-    "knockout": lambda p, **kw: draw_knockout(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", True), num_seeded=kw.get("num_seeded")),
-    "double_knockout": lambda p, **kw: draw_double_knockout(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", True), num_seeded=kw.get("num_seeded")),
-    "triple_knockout": lambda p, **kw: draw_triple_knockout(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", True), num_seeded=kw.get("num_seeded")),
-    "round_robin": lambda p, **kw: draw_round_robin(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", False), num_seeded=kw.get("num_seeded")),
-    "double_round_robin": lambda p, **kw: draw_double_round_robin(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", False), num_seeded=kw.get("num_seeded")),
+    "knockout": lambda p, **kw: draw_knockout(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", True), num_seeded=kw.get("num_seeded"), bracket_type=kw.get("bracket_type", "single")),
+    "double_knockout": lambda p, **kw: draw_knockout(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", True), num_seeded=kw.get("num_seeded"), bracket_type="double"),
+    "triple_knockout": lambda p, **kw: draw_knockout(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", True), num_seeded=kw.get("num_seeded"), bracket_type="triple"),
+    "round_robin": lambda p, **kw: draw_round_robin(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", False), num_seeded=kw.get("num_seeded"), num_rounds=kw.get("num_rounds", 1)),
+    "double_round_robin": lambda p, **kw: draw_round_robin(p, shuffle_seed=kw.get("shuffle_seed"), seeded=kw.get("seeded", False), num_seeded=kw.get("num_seeded"), num_rounds=2),
     "league_phase": lambda p, **kw: draw_uefa_league_phase(p, shuffle_seed=kw.get("shuffle_seed"), country_lock=False, max_per_country=2),
     "uefa_league_phase": lambda p, **kw: draw_uefa_league_phase(p, shuffle_seed=kw.get("shuffle_seed"), country_lock=False, max_per_country=2),
 }
+
 
 
 def _parse_args(s: str) -> list[Any]:

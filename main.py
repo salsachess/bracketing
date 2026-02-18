@@ -3,13 +3,10 @@
 Універсальний генератор жеребкувань.
 
 Формати:
-  1 — нокаут (одиночний)
-  2 — нокаут подвійний
-  3 — нокаут потрійний
-  4 — колова система
-  5 — подвійна колова система
-  6 — стиль Ліги чемпіонів УЄФА (групи + плей-оф)
-  7 — кастомна формула
+  1 — нокаут (одиночний, подвійний, потрійний — вибір при запуску)
+  2 — колова система (кількість кіл вибирається при запуску)
+  3 — стиль Ліги чемпіонів УЄФА (групи + плей-оф)
+  4 — кастомна формула
 
 Запуск: python main.py [номер або формула]
 Без аргументів — інтерактивний вибір.
@@ -23,10 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from models import Participant, DrawResult
 from formats import (
     draw_knockout,
-    draw_double_knockout,
-    draw_triple_knockout,
     draw_round_robin,
-    draw_double_round_robin,
     draw_uefa_style,
     draw_uefa_league_phase,
     draw_custom,
@@ -98,29 +92,25 @@ def run_draw(
     seed: int | None = 42,
     num_seeded: int | None = None,
     league_rounds: int | None = None,
+    knockout_type: str = "single",
+    round_robin_rounds: int = 1,
 ) -> DrawResult:
     """Запустити жеребкування за вибором. num_seeded: 0=повний жереб, n=усі сіяні. league_rounds: кількість турів для формату 8."""
     seed = seed if seed is not None else None
     n = len(participants)
-    if num_seeded is None and choice not in ("8", "league_phase", "етап ліги", "league phase"):
+    if num_seeded is None and choice not in ("3", "8", "league_phase", "етап ліги", "league phase"):
         num_seeded = n // 2
     if choice in ("1", "нокаут", "knockout"):
-        return draw_knockout(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
-    if choice in ("2", "подвійний нокаут", "double_knockout"):
-        return draw_double_knockout(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
-    if choice in ("3", "потрійний нокаут", "triple_knockout"):
-        return draw_triple_knockout(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
-    if choice in ("4", "колова", "round_robin"):
-        return draw_round_robin(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
-    if choice in ("5", "подвійна колова", "double_round_robin"):
-        return draw_double_round_robin(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
-    if choice in ("6", "uefa", "ліга чемпіонів"):
+        return draw_knockout(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded, bracket_type=knockout_type)
+    if choice in ("2", "колова", "round_robin"):
+        return draw_round_robin(participants, shuffle_seed=seed, seeded=True, num_seeded=num_seeded, num_rounds=round_robin_rounds)
+    if choice in ("3", "uefa", "ліга чемпіонів"):
         return draw_uefa_style(participants, num_groups=8, advance_per_group=2, shuffle_seed=seed, seeded=True)
     if choice in ("8", "league_phase", "етап ліги", "league phase"):
         rounds = league_rounds if league_rounds is not None else 8
         return draw_uefa_league_phase(participants, rounds=rounds, shuffle_seed=seed, country_lock=False, max_per_country=2)
     # Інакше — кастомна формула
-    return draw_custom(participants, formula=choice, shuffle_seed=seed, seeded=True, num_seeded=num_seeded, rounds=league_rounds)
+    return draw_custom(participants, formula=choice, shuffle_seed=seed, seeded=True, num_seeded=num_seeded)
 
 
 def run_draw_web(
@@ -130,10 +120,14 @@ def run_draw_web(
     num_seeded: int | None = None,
     seed: int | None = None,
     formula: str | None = None,
+    knockout_type: str = "single",
+    round_robin_rounds: int = 1,
 ) -> dict:
     """
     API для веб-сторінки: приймає параметри, повертає серіалізований результат
     (опис, раунди, групи) або {"error": "..."}.
+    knockout_type: "single", "double", "triple" для формату 1.
+    round_robin_rounds: кількість кіл для формату 2.
     """
     try:
         if choice == "7" and formula:
@@ -148,7 +142,7 @@ def run_draw_web(
             participants = make_sample_participants(n, format_kind="league_phase", rounds=league_rounds)
         else:
             league_rounds = None
-            if choice in ("6", "uefa", "ліга чемпіонів") and n < 16:
+            if choice in ("3", "uefa", "ліга чемпіонів") and n < 16:
                 n = 32
             participants = make_sample_participants(
                 n,
@@ -161,6 +155,8 @@ def run_draw_web(
             seed=seed,
             num_seeded=num_seeded if choice != "8" else None,
             league_rounds=league_rounds,
+            knockout_type=knockout_type,
+            round_robin_rounds=round_robin_rounds,
         )
         rounds_out = []
         for r in result.rounds:
@@ -188,12 +184,9 @@ def run_draw_web(
 def main() -> None:
     print("Універсальний генератор жеребкувань\n")
     print("Формати:")
-    print("  1 — нокаут (одиночний)")
-    print("  2 — нокаут подвійний")
-    print("  3 — нокаут потрійний")
-    print("  4 — колова система")
-    print("  5 — подвійна колова система")
-    print("  6 — стиль Ліги чемпіонів УЄФА (групи + плей-оф)")
+    print("  1 — нокаут (одиночний, подвійний або потрійний)")
+    print("  2 — колова система (одна чи більше кіл)")
+    print("  3 — стиль Ліги чемпіонів УЄФА (групи + плей-оф)")
     print("  8 — етап ліги ЛЧ (League Phase): 36 команд, 4 кошики, 8 матчів на команду")
     print("  7 — кастомна формула (наприклад: groups(4).round_robin().top(2).knockout())")
     print()
@@ -210,6 +203,8 @@ def main() -> None:
 
     num_seeded_arg: int | None = None
     league_rounds_arg: int | None = None
+    knockout_type_arg: str = "single"
+    round_robin_rounds_arg: int = 1
     is_league_phase = choice.strip() in ("8", "league_phase", "етап ліги", "league phase")
 
     if is_league_phase:
@@ -253,9 +248,26 @@ def main() -> None:
                 n_input = input("Кількість учасників (за замовч. 8): ").strip() or "8"
                 n = int(n_input)
             except (EOFError, ValueError):
-                n = 32 if choice.strip() in ("6", "uefa", "ліга чемпіонів") else 8
+                n = 32 if choice.strip() in ("3", "uefa", "ліга чемпіонів") else 8
 
-        needs_seeded = choice.strip() in ("1", "2", "3", "4", "5", "нокаут", "колова", "round_robin", "knockout")
+        # Виріб типу нокауту для опції 1
+        if choice.strip() in ("1", "нокаут", "knockout"):
+            bracket_choice = input("Тип нокауту (1=одиночний, 2=подвійний, 3=потрійний, за замовч. 1): ").strip() or "1"
+            if bracket_choice == "2":
+                knockout_type_arg = "double"
+            elif bracket_choice == "3":
+                knockout_type_arg = "triple"
+            else:
+                knockout_type_arg = "single"
+        # Вибір кількості кіл для опції 2
+        elif choice.strip() in ("2", "колова", "round_robin"):
+            try:
+                rounds_input = input("Кількість кіл (за замовч. 1): ").strip() or "1"
+                round_robin_rounds_arg = int(rounds_input)
+            except (EOFError, ValueError):
+                round_robin_rounds_arg = 1
+
+        needs_seeded = choice.strip() in ("1", "2", "нокаут", "колова", "round_robin", "knockout")
         if needs_seeded:
             try:
                 s_input = input("Кількість сіяних (0 = повний жереб, n = усі сіяні, за замовч. n/2): ").strip()
@@ -264,7 +276,7 @@ def main() -> None:
             except (EOFError, ValueError):
                 pass
 
-        if choice in ("6", "uefa", "ліга чемпіонів") and n < 16:
+        if choice in ("3", "uefa", "ліга чемпіонів") and n < 16:
             participants = make_sample_participants(32, num_seeded=16, format_kind="default")
             print("Для формату УЄФА використано 32 учасники.\n")
         else:
@@ -273,7 +285,14 @@ def main() -> None:
             )
 
     try:
-        result = run_draw(choice, participants, num_seeded=num_seeded_arg, league_rounds=league_rounds_arg)
+        result = run_draw(
+            choice, 
+            participants, 
+            num_seeded=num_seeded_arg, 
+            league_rounds=league_rounds_arg,
+            knockout_type=knockout_type_arg,
+            round_robin_rounds=round_robin_rounds_arg,
+        )
         print(result.summary())
     except Exception as e:
         print(f"Помилка: {e}")
